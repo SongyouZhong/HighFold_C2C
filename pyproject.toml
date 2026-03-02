@@ -1,0 +1,11 @@
+[project]
+name = "highfold-c2c"
+version = "1.0.0"
+description = "HighFold-C2C: Cyclic peptide design (C2C T5) and structure prediction (HighFold/AlphaFold2) unified pipeline"
+readme = "README.md"
+license = {file = "LICENSE"}
+requires-python = ">=3.10"
+
+[project.scripts]
+run-pipeline = "scripts.run_pipeline:main"
+run-predict-only = "scripts.run_predict_only:main"

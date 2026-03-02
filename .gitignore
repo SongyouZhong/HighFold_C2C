@@ -1,0 +1,50 @@
+# Python compiled files
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+
+# Virtual environments
+venv/
+env/
+ENV/
+.venv
+
+# Conda environments
+*conda*/
+
+# Output and results
+output/
+*.npy
+*.a3m
+*.done.txt
+
+# Model files (usually large)
+checkpoints/*.pt
+checkpoints/*.pth
+checkpoints/*.ckpt
+checkpoints/*.h5
+!checkpoints/.gitkeep
+
+# Logs
+log.txt
+*.log
+
+# Temporary files
+*.tmp
+*.temp
+*.swp
+*.swo
+*~
+
+# OS files
+.DS_Store
+Thumbs.db
+.directory
+
+# IDE files
+.vscode/
+.idea/
+*.sublime-project
+*.sublime-workspace

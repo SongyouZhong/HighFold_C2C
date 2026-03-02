@@ -1,0 +1,14 @@
+name: highfold_c2c
+channels:
+  - conda-forge
+  - defaults
+dependencies:
+  - python=3.10
+  - numpy
+  - pandas
+  - biopython
+  - pip
+  - pip:
+    # C2C dependencies (PyTorch + Transformers for T5 model)
+    - torch --index-url https://download.pytorch.org/whl/cu128
+    - transformers
