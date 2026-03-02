@@ -1927,15 +1927,11 @@ class EmbeddingsAndEvoformer(hk.Module):
         # Add one-hot-encoded clipped residue distances to the pair activations.
         pos = batch['residue_index']
 
-        # start of add on 20230823
-#        # offset = pos[:,None] - pos[None,:]
-#        i = jnp.arange(len(pos))
-#        ij = jnp.stack([i, i+len(pos)], -1)
-#        c_offset = i[:, None] - i[None, :]
-#        cyc_offset = jnp.abs(ij[:, None, :, None] - ij[None, :, None, :]).min((2, 3))
-#        offset = jnp.sign(c_offset) * cyc_offset
-        offset = batch['offset_ss']
-        print(offset)
+        # start of add on 20230823 (CycPOEM offset)
+        if 'offset_ss' in batch:
+          offset = batch['offset_ss']
+        else:
+          offset = pos[:, None] - pos[None, :]
         # end of add on 20230823
 
         offset = jnp.clip(offset + c.max_relative_feature, a_min=0, a_max=2 * c.max_relative_feature)

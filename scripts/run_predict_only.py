@@ -10,7 +10,7 @@ Usage::
         input.fasta output/ \\
         [--model-type alphafold2] \\
         [--msa-mode single_sequence] \\
-        [--disulfide-bond-pairs 2 5]
+        [--disulfide-bond-pairs "1,4"]
 """
 
 import argparse
@@ -37,10 +37,11 @@ def main():
     parser.add_argument("--model-type", default="alphafold2",
                         choices=["auto", "alphafold2", "alphafold2_ptm",
                                  "alphafold2_multimer_v1", "alphafold2_multimer_v2",
-                                 "alphafold2_multimer_v3"])
+                                 "alphafold2_multimer_v3", "deepfold_v1"])
     parser.add_argument("--msa-mode", default="single_sequence",
                         choices=["mmseqs2_uniref_env", "mmseqs2_uniref", "single_sequence"])
-    parser.add_argument("--disulfide-bond-pairs", type=int, nargs="+", default=[])
+    parser.add_argument("--disulfide-bond-pairs", type=str, default=None,
+                        help="Disulfide bond pairs (format: 'A,B' or 'A,B:C,D', 0-based)")
     parser.add_argument("--num-models", type=int, default=5, choices=[1, 2, 3, 4, 5])
     parser.add_argument("--num-recycle", type=int, default=None)
     parser.add_argument("--templates", action="store_true")
@@ -72,7 +73,7 @@ def main():
         if args.num_relax > 0:
             cmd += ["--num-relax", str(args.num_relax)]
     if args.disulfide_bond_pairs:
-        cmd += ["--disulfide-bond-pairs"] + [str(x) for x in args.disulfide_bond_pairs]
+        cmd += ["--disulfide-bond-pairs", args.disulfide_bond_pairs]
     cmd += [args.input, args.results]
 
     print(f"Running: {' '.join(cmd)}")

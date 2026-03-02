@@ -21,7 +21,11 @@ from typing import Any, Mapping, Optional, Sequence, Tuple
 
 from absl import logging
 from Bio import PDB
-from Bio.Data import SCOPData
+try:
+    from Bio.Data import SCOPData
+except ImportError:
+    # Biopython >= 1.80: SCOPData removed, use IUPACData instead
+    from Bio.Data import IUPACData as SCOPData
 
 # Type aliases:
 ChainId = str

@@ -515,8 +515,9 @@ class EmbeddingsAndEvoformer(hk.Module):
     asym_id = batch['asym_id']
     asym_id_same = jnp.equal(asym_id[:, None], asym_id[None, :])
     offset = pos[:, None] - pos[None, :]
-    size = len(batch['cycpep_index'])
-    offset = offset.at[:size, :size].set(batch['offset_ss'])
+    if 'offset_ss' in batch and 'cycpep_index' in batch:
+      size = len(batch['cycpep_index'])
+      offset = offset.at[:size, :size].set(batch['offset_ss'])
     dtype = jnp.bfloat16 if gc.bfloat16 else jnp.float32
 
     clipped_offset = jnp.clip(

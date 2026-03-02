@@ -16,7 +16,7 @@ Usage::
         --output-dir ./output \\
         [--model-type alphafold2] \\
         [--msa-mode single_sequence] \\
-        [--disulfide-bond-pairs 2 5 3 7] \\
+        [--disulfide-bond-pairs "2,5:3,7"] \\
         [--colabfold-bin colabfold_batch]
 """
 
@@ -65,10 +65,8 @@ def _build_colabfold_cmd(
         if num_relax > 0:
             cmd += ["--num-relax", str(num_relax)]
     if disulfide_bond_pairs:
-        flat = []
-        for a, b in disulfide_bond_pairs:
-            flat.extend([str(a), str(b)])
-        cmd += ["--disulfide-bond-pairs"] + flat
+        pairs_str = ":".join(f"{a},{b}" for a, b in disulfide_bond_pairs)
+        cmd += ["--disulfide-bond-pairs", pairs_str]
     cmd += [str(fasta_path), str(output_dir)]
     return cmd
 
@@ -127,7 +125,8 @@ def main():
     pred_group.add_argument(
         "--model-type", type=str, default="alphafold2",
         choices=["alphafold2", "alphafold2_ptm",
-                 "alphafold2_multimer_v1", "alphafold2_multimer_v2", "alphafold2_multimer_v3"],
+                 "alphafold2_multimer_v1", "alphafold2_multimer_v2", "alphafold2_multimer_v3",
+                 "deepfold_v1"],
         help="AlphaFold model type (default: alphafold2)",
     )
     pred_group.add_argument(
@@ -136,9 +135,9 @@ def main():
         help="MSA mode (default: single_sequence)",
     )
     pred_group.add_argument(
-        "--disulfide-bond-pairs", type=int, nargs="+", default=[],
-        metavar="POS",
-        help="Disulfide bond position pairs (flat list, e.g. 2 5 3 7 means bonds 2-5 and 3-7)",
+        "--disulfide-bond-pairs", type=str, default=None,
+        metavar="PAIRS",
+        help="Disulfide bond position pairs (format: 'A,B' or 'A,B:C,D', 0-based, e.g. '2,5:3,7')",
     )
     pred_group.add_argument("--num-models", type=int, default=5, choices=[1, 2, 3, 4, 5])
     pred_group.add_argument("--num-recycle", type=int, default=None)
@@ -181,14 +180,14 @@ def main():
     output_dir.mkdir(parents=True, exist_ok=True)
     fasta_path = output_dir / "predict.fasta"
 
-    # Parse disulfide bond pairs
+    # Parse disulfide bond pairs from "A,B:C,D" format
     disulfide_bond_pairs: list[tuple[int, int]] = []
-    if len(args.disulfide_bond_pairs) % 2 != 0:
-        parser.error("--disulfide-bond-pairs must have an even number of values")
-    for i in range(0, len(args.disulfide_bond_pairs), 2):
-        disulfide_bond_pairs.append(
-            (args.disulfide_bond_pairs[i], args.disulfide_bond_pairs[i + 1])
-        )
+    if args.disulfide_bond_pairs is not None:
+        for pair_str in args.disulfide_bond_pairs.split(":"):
+            parts = pair_str.strip().split(",")
+            if len(parts) != 2:
+                parser.error(f"Each disulfide pair must be 'A,B', got '{pair_str}'")
+            disulfide_bond_pairs.append((int(parts[0]), int(parts[1])))
 
     # ================================================================
     # Stage 1: C2C Sequence Generation

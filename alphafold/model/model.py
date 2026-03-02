@@ -35,10 +35,12 @@ class RunModel:
   def __init__(self,
                config: ml_collections.ConfigDict,
                params: Optional[Mapping[str, Mapping[str, np.ndarray]]] = None,
-               is_training = False):
+               is_training = False,
+               extended_ptm_config: Optional[dict] = None):
     
     self.config = config
     self.params = params
+    self.extended_ptm_config = extended_ptm_config
     self.multimer_mode = config.model.global_config.multimer_mode
 
     if self.multimer_mode:

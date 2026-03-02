@@ -6,15 +6,20 @@ HighFold-C2C is a unified pipeline that combines **C2C** (cyclic peptide sequenc
 
 - **C2C Sequence Generation**: Given a core peptide sequence, generate diverse cyclic peptide candidates using a trained T5 model
 - **HighFold Structure Prediction**: Predict 3D structures of cyclic peptides with head-to-tail and disulfide bridge constraints via CycPOEM (Cyclic Position Offset Encoding Matrix)
+- **New ColabFold v1.5.5 Support**: Adapted to the latest ColabFold with modular architecture (`input.py`, `relax.py`, `extra_ptm.py`), `deepfold_v1` model support, and improved MSA pairing. See [docs/colabfold-migration.md](docs/colabfold-migration.md) for details.
 - **Unified Pipeline**: One command to run the full workflow — from sequence design to structure prediction to physicochemical evaluation
-- **Backward Compatible**: The original `colabfold_batch` CLI workflow is fully preserved
+- **Backward Compatible**: The original `colabfold_batch` CLI workflow is fully preserved; CycPOEM is only activated when `--disulfide-bond-pairs` is provided
 
 ## Project Structure
 
 ```
 HighFold_C2C/
 ├── alphafold/          # AlphaFold core with CycPOEM modifications
-├── colabfold/          # ColabFold with CycPOEM computation + --disulfide-bond-pairs
+├── colabfold/          # ColabFold v1.5.5 with CycPOEM computation + --disulfide-bond-pairs
+│   ├── cycpoem.py      # CycPOEM algorithm (standalone module)
+│   ├── batch.py        # Main entry point (CycPOEM injected)
+│   ├── input.py        # Input parsing (new in v1.5.5)
+│   └── relax.py        # Structure relaxation (new in v1.5.5)
 ├── utils/              # CycPOEM construction, disulfide bridge combinations, evaluation
 ├── c2c/                # C2C T5 model for cyclic peptide sequence generation
 │   ├── model.py        # T5 model definition, CharTokenizer, model loading
@@ -50,7 +55,7 @@ pixi install && pixi run setup
 Copy the modified AlphaFold and ColabFold source files on top of the LocalColabFold installation:
 
 ```bash
-SITE_PACKAGES="path/to/localcolabfold/.pixi/envs/default/lib/python3.10/site-packages"
+SITE_PACKAGES="path/to/localcolabfold/.pixi/envs/default/lib/python3.12/site-packages"
 cp -r HighFold_C2C/alphafold/* "$SITE_PACKAGES/alphafold/"
 cp -r HighFold_C2C/colabfold/* "$SITE_PACKAGES/colabfold/"
 ```
@@ -108,7 +113,7 @@ python -m scripts.run_pipeline \
     --core CNNNC \
     --span-len 5 \
     --num-sample 20 \
-    --disulfide-bond-pairs 1 5 \
+    --disulfide-bond-pairs "0,4" \
     --output-dir ./output
 ```
 
@@ -133,14 +138,14 @@ python -m scripts.run_predict_only \
     input.fasta ./output/ \
     --model-type alphafold2 \
     --msa-mode single_sequence \
-    --disulfide-bond-pairs 2 5
+    --disulfide-bond-pairs "1,4"
 ```
 
 Or directly use `colabfold_batch`:
 
 ```bash
 colabfold_batch --model-type alphafold2 --msa-mode single_sequence \
-    --disulfide-bond-pairs 2 5 input.fasta output/
+    --disulfide-bond-pairs "1,4" input.fasta output/
 ```
 
 ### Pipeline Parameters
@@ -154,9 +159,9 @@ colabfold_batch --model-type alphafold2 --msa-mode single_sequence \
 | `--temperature` | 1.0 | Sampling temperature |
 | `--top-p` | 0.9 | Nucleus sampling threshold |
 | `--output-dir` | `./output` | Output directory |
-| `--model-type` | `alphafold2` | AlphaFold model type |
+| `--model-type` | `alphafold2` | AlphaFold model type (`alphafold2`, `alphafold2_ptm`, `alphafold2_multimer_v1/v2/v3`, `deepfold_v1`) |
 | `--msa-mode` | `single_sequence` | MSA mode |
-| `--disulfide-bond-pairs` | [] | Disulfide bond positions (flat list) |
+| `--disulfide-bond-pairs` | None | Disulfide bond positions (format: `"A,B"` or `"A,B:C,D"`, 0-based) |
 | `--num-models` | 5 | Number of AlphaFold models |
 | `--colabfold-bin` | `colabfold_batch` | Path to colabfold_batch |
 
@@ -183,6 +188,11 @@ After running the full pipeline, `output/` will contain:
 If you use HighFold, please cite:
 
 > HighFold: accurately predicting structures of cyclic peptides and complexes with head-to-tail and disulfide bridge constraints
+
+## Documentation
+
+- [ColabFold v1.5.5 Migration Details](docs/colabfold-migration.md) — Detailed description of all changes made to adapt CycPOEM to the new ColabFold version
+- [Merge Plan](merge-plan.md) — Original C2C + HighFold merge design document
 
 ## License
 
