@@ -1,54 +1,37 @@
 # ============================================================
 # HighFold-C2C Docker Compose
 # ============================================================
+# This compose file deploys ONLY the HighFold-C2C application.
+# It connects to EXTERNAL services already running on the host:
+#   - PostgreSQL (default: host port 5432)
+#   - SeaweedFS  (default: host port 8888)
+#
 # Usage:
-#   docker compose up -d            # start all services
-#   docker compose up -d app        # start app only (external DB)
-#   docker compose --profile storage up -d  # include SeaweedFS
+#   docker compose --env-file ../.env up -d        # start app
+#   docker compose --env-file ../.env down          # stop app
+#   docker compose --env-file ../.env logs -f       # view logs
 #
 # GPU support requires the NVIDIA Container Toolkit.
 
 services:
-  # ── PostgreSQL Database ──────────────────────────────────
-  postgres:
-    image: postgres:15-alpine
-    restart: unless-stopped
-    environment:
-      POSTGRES_USER: ${DB_USER:-admin}
-      POSTGRES_PASSWORD: ${DB_PASSWORD:-secret}
-      POSTGRES_DB: ${DB_NAME:-mydatabase}
-    ports:
-      - "${DB_PORT:-5432}:5432"
-    volumes:
-      - pgdata:/var/lib/postgresql/data
-      - ../database:/docker-entrypoint-initdb.d:ro
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-admin}"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-    networks:
-      - highfold-network
-
   # ── HighFold-C2C Application ─────────────────────────────
   app:
     build:
       context: ..
       dockerfile: docker/Dockerfile
     restart: unless-stopped
-    depends_on:
-      postgres:
-        condition: service_healthy
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     environment:
-      # Database
-      DB_HOST: postgres
-      DB_PORT: 5432
+      # Database (external PostgreSQL on host)
+      DB_HOST: ${DB_HOST:-host.docker.internal}
+      DB_PORT: ${DB_PORT:-5432}
       DB_USER: ${DB_USER:-admin}
       DB_PASSWORD: ${DB_PASSWORD:-secret}
       DB_NAME: ${DB_NAME:-mydatabase}
       DB_POOL_MIN: ${DB_POOL_MIN:-1}
       DB_POOL_MAX: ${DB_POOL_MAX:-10}
-      # SeaweedFS
+      # SeaweedFS (external on host)
       SEAWEED_API_TYPE: ${SEAWEED_API_TYPE:-filer}
       SEAWEED_FILER_ENDPOINT: ${SEAWEED_FILER_ENDPOINT:-http://host.docker.internal:8888}
       SEAWEED_BUCKET: ${SEAWEED_BUCKET:-astramolecula}
@@ -73,56 +56,7 @@ services:
             - driver: nvidia
               count: 1
               capabilities: [gpu]
-    networks:
-      - highfold-network
-
-  # ── SeaweedFS (optional, opt-in via --profile storage) ───
-  seaweedfs-master:
-    image: chrislusf/seaweedfs:latest
-    profiles: [storage]
-    command: "master -ip=seaweedfs-master -port=9333"
-    ports:
-      - "9333:9333"
-    networks:
-      - highfold-network
-
-  seaweedfs-volume:
-    image: chrislusf/seaweedfs:latest
-    profiles: [storage]
-    command: "volume -mserver=seaweedfs-master:9333 -port=8080 -ip=seaweedfs-volume"
-    depends_on:
-      - seaweedfs-master
-    networks:
-      - highfold-network
-
-  seaweedfs-filer:
-    image: chrislusf/seaweedfs:latest
-    profiles: [storage]
-    command: "filer -master=seaweedfs-master:9333 -port=8888"
-    ports:
-      - "8888:8888"
-    depends_on:
-      - seaweedfs-master
-      - seaweedfs-volume
-    networks:
-      - highfold-network
-
-  seaweedfs-s3:
-    image: chrislusf/seaweedfs:latest
-    profiles: [storage]
-    command: "s3 -filer=seaweedfs-filer:8888 -port=8333"
-    ports:
-      - "8333:8333"
-    depends_on:
-      - seaweedfs-filer
-    networks:
-      - highfold-network
 
 volumes:
-  pgdata:
   logs:
   temp:
-
-networks:
-  highfold-network:
-    driver: bridge

@@ -13,7 +13,7 @@ It can run as a **standalone CLI tool** or be deployed as a **microservice** wit
 - **Microservice Mode**: FastAPI server (port 8003) with background task polling, multi-worker support, and RESTful result retrieval
 - **Object Storage**: SeaweedFS integration for centralized input/output file management
 - **Task Tracking**: PostgreSQL-based task queue (shared with AstraMolecula `tasks` table, `task_type='highfold_c2c'`)
-- **Docker Ready**: GPU-enabled containerized deployment with Docker Compose
+- **Docker Ready**: GPU-enabled containerized deployment with Docker Compose; connects to external PostgreSQL and SeaweedFS on the host
 - **Backward Compatible**: The original `colabfold_batch` CLI workflow is fully preserved; CycPOEM is only activated when `--disulfide-bond-pairs` is provided
 
 ## Project Structure
@@ -270,36 +270,76 @@ CREATE TABLE highfold_task_params (
 
 ### Docker Deployment
 
+> **Note:** The Docker setup deploys **only the HighFold-C2C application container**.
+> It connects to **external services already running on the host machine**:
+> - **PostgreSQL** (default: host port 5432)
+> - **SeaweedFS** (default: host port 8888)
+>
+> Make sure these services are running before starting the container.
+
+#### Prerequisites
+
+1. Docker with [NVIDIA Container Toolkit](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/install-guide.html) for GPU support
+2. PostgreSQL running on the host (shared with AstraMolecula platform)
+3. SeaweedFS running on the host (shared with AstraMolecula platform)
+4. Place `c2c_model.pt` in `checkpoints/` directory
+
+#### Quick Start
+
 ```bash
 cd docker
 
-# Build and start (with GPU support)
+# 1. Configure environment (use host.docker.internal for Docker)
+cp ../.env.example ../.env
+# Edit ../.env if needed (defaults connect to host services)
+
+# 2. Initialize database tables (first time only)
+./docker-manage.sh init-db
+
+# 3. Build the image
 ./docker-manage.sh build
+
+# 4. Start the app
 ./docker-manage.sh up
-
-# With local SeaweedFS
-./docker-manage.sh up --storage
-
-# Development mode (hot reload + source mounting)
-./docker-manage.sh up --dev
 
 # View logs
 ./docker-manage.sh logs --follow
 
+# Development mode (hot reload + source mounting)
+./docker-manage.sh up --dev
+
 # Stop
 ./docker-manage.sh down
+```
+
+#### Manual Docker Compose Commands
+
+```bash
+cd docker
+
+# Build
+docker compose --env-file ../.env build app
+
+# Start
+docker compose --env-file ../.env up -d app
+
+# Logs
+docker compose --env-file ../.env logs -f
+
+# Stop
+docker compose --env-file ../.env down
 ```
 
 ### Environment Variables
 
 See [.env.example](.env.example) for all configuration options. Key variables:
 
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `DB_HOST` | `127.0.0.1` | PostgreSQL host |
+| Variable | Default (Docker) | Description |
+|----------|------------------|-------------|
+| `DB_HOST` | `host.docker.internal` | PostgreSQL host (use `127.0.0.1` for non-Docker) |
 | `DB_PORT` | `5432` | PostgreSQL port |
 | `DB_NAME` | `mydatabase` | Database name |
-| `SEAWEED_FILER_ENDPOINT` | `http://localhost:8888` | SeaweedFS Filer URL |
+| `SEAWEED_FILER_ENDPOINT` | `http://host.docker.internal:8888` | SeaweedFS Filer URL (use `http://localhost:8888` for non-Docker) |
 | `SEAWEED_BUCKET` | `astramolecula` | Storage bucket name |
 | `TASK_QUERY_INTERVAL` | `180` | Polling interval (seconds) |
 | `MAX_CONCURRENT_TASKS` | `2` | Max parallel tasks |

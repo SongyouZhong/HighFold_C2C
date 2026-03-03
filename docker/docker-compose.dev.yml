@@ -2,7 +2,7 @@
 # HighFold-C2C Docker Compose — Development Overrides
 # ============================================================
 # Usage:
-#   docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d
+#   docker compose -f docker-compose.yml -f docker-compose.dev.yml --env-file ../.env up -d
 
 services:
   app:
@@ -25,7 +25,6 @@ services:
       DEBUG: "true"
       TASK_QUERY_INTERVAL: 60
       MAX_CONCURRENT_TASKS: 1
-      SEAWEED_FILER_ENDPOINT: http://host.docker.internal:8888
 
 volumes:
   logs:
