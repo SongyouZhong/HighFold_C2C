@@ -1,0 +1,128 @@
+# ============================================================
+# HighFold-C2C Docker Compose
+# ============================================================
+# Usage:
+#   docker compose up -d            # start all services
+#   docker compose up -d app        # start app only (external DB)
+#   docker compose --profile storage up -d  # include SeaweedFS
+#
+# GPU support requires the NVIDIA Container Toolkit.
+
+services:
+  # ── PostgreSQL Database ──────────────────────────────────
+  postgres:
+    image: postgres:15-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${DB_USER:-admin}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-secret}
+      POSTGRES_DB: ${DB_NAME:-mydatabase}
+    ports:
+      - "${DB_PORT:-5432}:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ../database:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-admin}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - highfold-network
+
+  # ── HighFold-C2C Application ─────────────────────────────
+  app:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      # Database
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_USER: ${DB_USER:-admin}
+      DB_PASSWORD: ${DB_PASSWORD:-secret}
+      DB_NAME: ${DB_NAME:-mydatabase}
+      DB_POOL_MIN: ${DB_POOL_MIN:-1}
+      DB_POOL_MAX: ${DB_POOL_MAX:-10}
+      # SeaweedFS
+      SEAWEED_API_TYPE: ${SEAWEED_API_TYPE:-filer}
+      SEAWEED_FILER_ENDPOINT: ${SEAWEED_FILER_ENDPOINT:-http://host.docker.internal:8888}
+      SEAWEED_BUCKET: ${SEAWEED_BUCKET:-astramolecula}
+      # Task processing
+      TASK_QUERY_INTERVAL: ${TASK_QUERY_INTERVAL:-180}
+      MAX_CONCURRENT_TASKS: ${MAX_CONCURRENT_TASKS:-2}
+      # HighFold defaults
+      C2C_CHECKPOINT_PATH: /app/checkpoints/c2c_model.pt
+      COLABFOLD_BIN: ${COLABFOLD_BIN:-colabfold_batch}
+      # Paths
+      TEMP_DIR: /tmp/highfold_c2c
+      LOG_DIR: /tmp/highfold_c2c/logs
+    ports:
+      - "${APP_PORT:-8003}:8003"
+    volumes:
+      - logs:/tmp/highfold_c2c/logs
+      - temp:/tmp/highfold_c2c
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+    networks:
+      - highfold-network
+
+  # ── SeaweedFS (optional, opt-in via --profile storage) ───
+  seaweedfs-master:
+    image: chrislusf/seaweedfs:latest
+    profiles: [storage]
+    command: "master -ip=seaweedfs-master -port=9333"
+    ports:
+      - "9333:9333"
+    networks:
+      - highfold-network
+
+  seaweedfs-volume:
+    image: chrislusf/seaweedfs:latest
+    profiles: [storage]
+    command: "volume -mserver=seaweedfs-master:9333 -port=8080 -ip=seaweedfs-volume"
+    depends_on:
+      - seaweedfs-master
+    networks:
+      - highfold-network
+
+  seaweedfs-filer:
+    image: chrislusf/seaweedfs:latest
+    profiles: [storage]
+    command: "filer -master=seaweedfs-master:9333 -port=8888"
+    ports:
+      - "8888:8888"
+    depends_on:
+      - seaweedfs-master
+      - seaweedfs-volume
+    networks:
+      - highfold-network
+
+  seaweedfs-s3:
+    image: chrislusf/seaweedfs:latest
+    profiles: [storage]
+    command: "s3 -filer=seaweedfs-filer:8888 -port=8333"
+    ports:
+      - "8333:8333"
+    depends_on:
+      - seaweedfs-filer
+    networks:
+      - highfold-network
+
+volumes:
+  pgdata:
+  logs:
+  temp:
+
+networks:
+  highfold-network:
+    driver: bridge

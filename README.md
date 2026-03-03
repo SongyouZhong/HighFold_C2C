@@ -2,35 +2,56 @@
 
 HighFold-C2C is a unified pipeline that combines **C2C** (cyclic peptide sequence generation using a T5 model) with **HighFold** (cyclic peptide structure prediction using CycPOEM-enhanced AlphaFold2).
 
+It can run as a **standalone CLI tool** or be deployed as a **microservice** with FastAPI, PostgreSQL task tracking, and SeaweedFS object storage — following the same architecture as the AstraMolecula platform.
+
 ## Features
 
 - **C2C Sequence Generation**: Given a core peptide sequence, generate diverse cyclic peptide candidates using a trained T5 model
 - **HighFold Structure Prediction**: Predict 3D structures of cyclic peptides with head-to-tail and disulfide bridge constraints via CycPOEM (Cyclic Position Offset Encoding Matrix)
 - **New ColabFold v1.5.5 Support**: Adapted to the latest ColabFold with modular architecture (`input.py`, `relax.py`, `extra_ptm.py`), `deepfold_v1` model support, and improved MSA pairing. See [docs/colabfold-migration.md](docs/colabfold-migration.md) for details.
 - **Unified Pipeline**: One command to run the full workflow — from sequence design to structure prediction to physicochemical evaluation
+- **Microservice Mode**: FastAPI server (port 8003) with background task polling, multi-worker support, and RESTful result retrieval
+- **Object Storage**: SeaweedFS integration for centralized input/output file management
+- **Task Tracking**: PostgreSQL-based task queue (shared with AstraMolecula `tasks` table, `task_type='highfold_c2c'`)
+- **Docker Ready**: GPU-enabled containerized deployment with Docker Compose
 - **Backward Compatible**: The original `colabfold_batch` CLI workflow is fully preserved; CycPOEM is only activated when `--disulfide-bond-pairs` is provided
 
 ## Project Structure
 
 ```
 HighFold_C2C/
-├── alphafold/          # AlphaFold core with CycPOEM modifications
-├── colabfold/          # ColabFold v1.5.5 with CycPOEM computation + --disulfide-bond-pairs
-│   ├── cycpoem.py      # CycPOEM algorithm (standalone module)
-│   ├── batch.py        # Main entry point (CycPOEM injected)
-│   ├── input.py        # Input parsing (new in v1.5.5)
-│   └── relax.py        # Structure relaxation (new in v1.5.5)
-├── utils/              # CycPOEM construction, disulfide bridge combinations, evaluation
-├── c2c/                # C2C T5 model for cyclic peptide sequence generation
-│   ├── model.py        # T5 model definition, CharTokenizer, model loading
-│   ├── generate.py     # Sequence generation (greedy + sampling)
-│   ├── evaluate.py     # Physicochemical properties + pLDDT scoring
-│   └── config.py       # Default configuration constants
-├── scripts/            # User entry points
-│   ├── run_pipeline.py       # Full 3-stage pipeline
-│   └── run_predict_only.py   # Structure prediction only (backward compatible)
-├── checkpoints/        # Model weights directory (c2c_model.pt)
-└── HighFold_data/      # Datasets
+├── alphafold/              # AlphaFold core with CycPOEM modifications
+├── colabfold/              # ColabFold v1.5.5 with CycPOEM computation + --disulfide-bond-pairs
+│   ├── cycpoem.py          # CycPOEM algorithm (standalone module)
+│   ├── batch.py            # Main entry point (CycPOEM injected)
+│   ├── input.py            # Input parsing (new in v1.5.5)
+│   └── relax.py            # Structure relaxation (new in v1.5.5)
+├── utils/                  # CycPOEM construction, disulfide bridge combinations, evaluation
+├── c2c/                    # C2C T5 model for cyclic peptide sequence generation
+│   ├── model.py            # T5 model definition, CharTokenizer, model loading
+│   ├── generate.py         # Sequence generation (greedy + sampling)
+│   ├── evaluate.py         # Physicochemical properties + pLDDT scoring
+│   └── config.py           # Default configuration constants
+├── scripts/                # CLI entry points (original usage)
+│   ├── run_pipeline.py     # Full 3-stage pipeline
+│   └── run_predict_only.py # Structure prediction only
+├── src/highfold_c2c/       # ★ Microservice layer (new)
+│   ├── app.py              # FastAPI application (port 8003)
+│   ├── __main__.py         # CLI: python -m highfold_c2c
+│   ├── config/             # Settings, storage config, logging
+│   ├── database/           # PostgreSQL connection pool & task queries
+│   ├── core/               # Pipeline wrapper, task processor, async processor
+│   └── services/storage/   # SeaweedFS async client
+├── database/               # SQL migration scripts
+│   └── init_highfold_tables.sql
+├── docker/                 # Docker deployment files
+│   ├── Dockerfile
+│   ├── docker-compose.yml
+│   ├── docker-compose.dev.yml
+│   └── docker-manage.sh
+├── tests/                  # Unit tests (pytest)
+├── checkpoints/            # Model weights directory (c2c_model.pt)
+└── HighFold_data/          # Datasets
 ```
 
 ## Installation
@@ -68,7 +89,14 @@ conda env create -f environment.yml
 conda activate highfold_c2c
 ```
 
-### Step 4: Download C2C model weights
+### Step 4: Install the package (for microservice mode)
+
+```bash
+# Install in development mode
+pip install -e ".[dev]"
+```
+
+### Step 5: Download C2C model weights
 
 Place the `c2c_model.pt` file into the `checkpoints/` directory:
 
@@ -77,7 +105,7 @@ Place the `c2c_model.pt` file into the `checkpoints/` directory:
 cp /path/to/c2c_model.pt checkpoints/
 ```
 
-### Step 5: Ensure `colabfold_batch` is on PATH
+### Step 6: Ensure `colabfold_batch` is on PATH
 
 ```bash
 export PATH="path/to/localcolabfold/.pixi/envs/default/bin:$PATH"
@@ -176,6 +204,108 @@ After running the full pipeline, `output/` will contain:
 | `pep*_scores_*.json` | Per-residue pLDDT scores |
 | `output.csv` | Summary: sequences, pLDDT, MW, pI, aromaticity, instability, hydrophobicity, hydrophilicity |
 
+## Microservice Mode
+
+### Overview
+
+HighFold-C2C can also run as a background microservice that polls a PostgreSQL task queue and processes jobs automatically. This is designed for integration with the **AstraMolecula** platform.
+
+**Architecture:**
+- **FastAPI** server on port 8003 (health check, task status, result retrieval)
+- **Background polling** — checks database every 180 seconds for `pending` tasks
+- **SeaweedFS** object storage for input/output files
+- **Multi-worker** — `ThreadPoolExecutor` supports concurrent task processing
+
+### Quick Start (Service)
+
+```bash
+# 1. Copy and configure environment
+cp .env.example .env
+# Edit .env with your database and SeaweedFS settings
+
+# 2. Start the service
+python -m highfold_c2c --host 0.0.0.0 --port 8003
+
+# Or use the entry point
+highfold-c2c-server --host 0.0.0.0 --port 8003
+```
+
+### API Endpoints
+
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/` | Service info |
+| GET | `/health` | Health check |
+| GET | `/status` | Service status (active tasks, uptime) |
+| GET | `/results/{task_id}` | Get task results (JSON) |
+| GET | `/results/{task_id}/csv` | Download output.csv |
+| GET | `/structures/{task_id}/{filename}` | Download PDB structure file |
+| GET | `/sequences/{task_id}` | Get generated sequences |
+
+### Task Workflow
+
+1. An external system (e.g. AstraMolecula) inserts a row into the `tasks` table with `task_type='highfold_c2c'` and `status='pending'`, along with parameters in the `highfold_task_params` table
+2. The background worker picks up the task, downloads input files from SeaweedFS
+3. Runs the 3-stage pipeline (C2C → ColabFold → Evaluate)
+4. Uploads results to SeaweedFS and updates task status to `completed` or `failed`
+
+### Database Tables
+
+The service uses the shared AstraMolecula `tasks` table plus a dedicated parameters table:
+
+```sql
+-- Parameters table (see database/init_highfold_tables.sql)
+CREATE TABLE highfold_task_params (
+    task_id       INTEGER PRIMARY KEY REFERENCES tasks(id),
+    core_sequence VARCHAR(100) NOT NULL,
+    span_len      INTEGER DEFAULT 5,
+    num_sample    INTEGER DEFAULT 20,
+    temperature   FLOAT DEFAULT 1.0,
+    top_p         FLOAT DEFAULT 0.9,
+    model_type    VARCHAR(50) DEFAULT 'alphafold2',
+    disulfide_bond_pairs TEXT,
+    ...
+);
+```
+
+### Docker Deployment
+
+```bash
+cd docker
+
+# Build and start (with GPU support)
+./docker-manage.sh build
+./docker-manage.sh up
+
+# With local SeaweedFS
+./docker-manage.sh up --storage
+
+# Development mode (hot reload + source mounting)
+./docker-manage.sh up --dev
+
+# View logs
+./docker-manage.sh logs --follow
+
+# Stop
+./docker-manage.sh down
+```
+
+### Environment Variables
+
+See [.env.example](.env.example) for all configuration options. Key variables:
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `DB_HOST` | `127.0.0.1` | PostgreSQL host |
+| `DB_PORT` | `5432` | PostgreSQL port |
+| `DB_NAME` | `mydatabase` | Database name |
+| `SEAWEED_FILER_ENDPOINT` | `http://localhost:8888` | SeaweedFS Filer URL |
+| `SEAWEED_BUCKET` | `astramolecula` | Storage bucket name |
+| `TASK_QUERY_INTERVAL` | `180` | Polling interval (seconds) |
+| `MAX_CONCURRENT_TASKS` | `2` | Max parallel tasks |
+| `C2C_CHECKPOINT_PATH` | `checkpoints/c2c_model.pt` | Model weights path |
+| `COLABFOLD_BIN` | `colabfold_batch` | colabfold_batch executable |
+
 ## Sequence Constraints
 
 - Total cyclic peptide length should be ≤ 20 amino acids (training data range)
@@ -189,10 +319,28 @@ If you use HighFold, please cite:
 
 > HighFold: accurately predicting structures of cyclic peptides and complexes with head-to-tail and disulfide bridge constraints
 
+## Testing
+
+```bash
+# Install dev dependencies
+pip install -e ".[dev]"
+
+# Run all tests
+python -m pytest tests/ -v
+
+# Run specific test modules
+python -m pytest tests/test_pipeline.py -v
+python -m pytest tests/test_storage.py -v
+python -m pytest tests/test_task_processor.py -v
+```
+
 ## Documentation
 
 - [ColabFold v1.5.5 Migration Details](docs/colabfold-migration.md) — Detailed description of all changes made to adapt CycPOEM to the new ColabFold version
 - [Merge Plan](merge-plan.md) — Original C2C + HighFold merge design document
+- [.env.example](.env.example) — All environment variables for microservice configuration
+- [database/init_highfold_tables.sql](database/init_highfold_tables.sql) — Database migration script
+- [中文文档](README_CN.md) — Chinese documentation
 
 ## License
 

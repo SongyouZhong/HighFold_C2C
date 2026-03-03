@@ -5,7 +5,55 @@ description = "HighFold-C2C: Cyclic peptide design (C2C T5) and structure predic
 readme = "README.md"
 license = {file = "LICENSE"}
 requires-python = ">=3.10"
+dependencies = [
+    "fastapi>=0.100.0",
+    "uvicorn[standard]>=0.22.0",
+    "psycopg2-binary>=2.9.0",
+    "aiohttp>=3.9.0",
+    "python-dotenv>=1.0.0",
+    "pyyaml>=6.0",
+    "numpy",
+    "pandas",
+    "biopython",
+    "tqdm",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.0",
+    "pytest-asyncio>=0.21",
+    "pytest-cov>=4.0",
+    "ruff>=0.1.0",
+    "black>=23.0",
+    "isort>=5.0",
+]
 
 [project.scripts]
 run-pipeline = "scripts.run_pipeline:main"
 run-predict-only = "scripts.run_predict_only:main"
+highfold-c2c = "highfold_c2c.__main__:main"
+highfold-c2c-server = "highfold_c2c.app:run_server"
+
+[build-system]
+requires = ["setuptools>=68.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["src", "."]
+include = ["highfold_c2c*", "c2c*", "scripts*"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
+pythonpath = ["src", "."]
+
+[tool.ruff]
+line-length = 88
+target-version = "py310"
+
+[tool.black]
+line-length = 88
+target-version = ["py310"]
+
+[tool.isort]
+profile = "black"

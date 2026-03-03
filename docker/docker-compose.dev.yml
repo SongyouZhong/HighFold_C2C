@@ -1,0 +1,32 @@
+# ============================================================
+# HighFold-C2C Docker Compose — Development Overrides
+# ============================================================
+# Usage:
+#   docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d
+
+services:
+  app:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    command: >
+      uvicorn highfold_c2c.app:app
+      --host 0.0.0.0 --port 8003
+      --reload
+    volumes:
+      # Mount source code for hot-reload
+      - ../src:/app/src:ro
+      - ../c2c:/app/c2c:ro
+      - ../scripts:/app/scripts:ro
+      - ../utils:/app/utils:ro
+      - logs:/tmp/highfold_c2c/logs
+      - temp:/tmp/highfold_c2c
+    environment:
+      DEBUG: "true"
+      TASK_QUERY_INTERVAL: 60
+      MAX_CONCURRENT_TASKS: 1
+      SEAWEED_FILER_ENDPOINT: http://host.docker.internal:8888
+
+volumes:
+  logs:
+  temp:

@@ -11,8 +11,16 @@ env/
 ENV/
 .venv
 
-# Conda environments
+# Conda / Pixi environments
 *conda*/
+.pixi/
+
+# Build artifacts & packaging
+*.egg-info/
+*.egg
+dist/
+build/
+*.whl
 
 # Output and results
 output/
@@ -28,8 +36,14 @@ checkpoints/*.h5
 !checkpoints/.gitkeep
 
 # Logs
+logs/
 log.txt
 *.log
+
+# Environment variables (keep .env.example)
+.env
+.env.local
+.env.production
 
 # Temporary files
 *.tmp
@@ -48,3 +62,6 @@ Thumbs.db
 .idea/
 *.sublime-project
 *.sublime-workspace
+
+# Docker volumes / data
+docker/postgres_data/

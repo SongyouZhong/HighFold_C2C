@@ -1,0 +1,26 @@
+# HighFold-C2C Docker ignore
+__pycache__/
+*.py[cod]
+*.egg-info/
+*.eggs/
+dist/
+build/
+.git/
+.gitignore
+.env
+*.log
+logs/
+output/
+*.npy
+*.a3m
+*.done.txt
+.vscode/
+.idea/
+node_modules/
+venv/
+env/
+.venv/
+checkpoints/*.pt
+checkpoints/*.pth
+!checkpoints/.gitkeep
+HighFold_data/
