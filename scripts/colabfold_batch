@@ -1,0 +1,18 @@
+#!/bin/bash
+# ============================================================
+# colabfold_batch — Wrapper for ColabFold batch prediction
+# ============================================================
+# This script activates the 'colabfold' conda environment and
+# runs colabfold.batch.main(), isolating JAX from the main
+# PyTorch environment used by HighFold-C2C Stage 1.
+#
+# Usage:  colabfold_batch [args...]
+#   Same CLI interface as the upstream colabfold_batch command.
+
+set -euo pipefail
+
+# Ensure the conda env's libraries (including libstdc++) are used
+export LD_LIBRARY_PATH="/opt/conda/envs/colabfold/lib:${LD_LIBRARY_PATH:-}"
+
+# Activate the colabfold conda environment via mamba
+exec mamba run --no-capture-output -n colabfold python -m colabfold.batch "$@"

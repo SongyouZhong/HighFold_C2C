@@ -90,6 +90,15 @@ from jax import local_devices
 logging.getLogger('jax._src.xla_bridge').addFilter(lambda _: False) # jax >=0.4.6
 logging.getLogger('jax._src.lib.xla_bridge').addFilter(lambda _: False) # jax < 0.4.5
 
+
+def _get_colabfold_version() -> str:
+    """Get colabfold version, with fallback for non-pip installations."""
+    try:
+        return importlib_metadata.version("colabfold")
+    except Exception:
+        return "1.5.5-local"
+
+
 def mk_mock_template(
     query_sequence: Union[List[str], str], num_temp: int = 1
 ) -> Dict[str, Any]:
@@ -1269,7 +1278,7 @@ def run(
         "use_cluster_profile": use_cluster_profile,
         "use_fuse": use_fuse,
         "use_bfloat16": use_bfloat16,
-        "version": importlib_metadata.version("colabfold"),
+        "version": _get_colabfold_version(),
         "calc_extra_ptm": calc_extra_ptm,
         "use_probs_extra": use_probs_extra,
         "max_template_date": max_template_date,
@@ -2037,7 +2046,7 @@ def main():
 
     setup_logging(Path(args.results).joinpath("log.txt"), verbose=args.debug_logging)
 
-    version = importlib_metadata.version("colabfold")
+    version = _get_colabfold_version()
     commit = get_commit()
     if commit:
         version += f" ({commit})"

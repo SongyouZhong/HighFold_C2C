@@ -1,0 +1,34 @@
+# ============================================================
+# ColabFold / JAX Environment
+# ============================================================
+# Separate conda environment for structure prediction (Stage 2).
+# Kept isolated from the main highfold_c2c (PyTorch) environment
+# to avoid GPU memory and dependency conflicts between JAX and PyTorch.
+
+name: colabfold
+channels:
+  - conda-forge
+  - defaults
+dependencies:
+  - python=3.10
+  - numpy
+  - pandas
+  - biopython
+  - matplotlib
+  - tqdm
+  - openmm>=7.7.0
+  - pdbfixer
+  - libstdcxx-ng>=12
+  - pip
+  - pip:
+    - "jax[cuda12]>=0.4.25,<0.6.0"
+    - dm-haiku
+    - tensorflow
+    - silence-tensorflow
+    - importlib-metadata
+    - appdirs
+    - absl-py
+    - ml-collections
+    - dm-tree
+    - immutabledict
+    - scipy

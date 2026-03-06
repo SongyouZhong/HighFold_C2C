@@ -174,12 +174,24 @@ def run_highfold_pipeline(config: Dict[str, Any], work_dir: Path) -> Dict[str, A
     # Stage 2: HighFold Structure Prediction (subprocess)
     # ================================================================
     if not skip_predict:
+        # Free PyTorch GPU memory before launching JAX-based colabfold
+        try:
+            import torch
+            if torch.cuda.is_available():
+                torch.cuda.empty_cache()
+                logger.info("Released PyTorch GPU memory before Stage 2")
+        except ImportError:
+            pass
+
         colabfold_bin = config.get("colabfold_bin", "colabfold_batch")
         if shutil.which(colabfold_bin) is None:
-            raise FileNotFoundError(
-                f"'{colabfold_bin}' not found on PATH. "
-                "Install LocalColabFold and add it to PATH."
-            )
+            # Also check if it's an absolute path that exists
+            if not Path(colabfold_bin).is_file():
+                raise FileNotFoundError(
+                    f"'{colabfold_bin}' not found on PATH or as absolute path. "
+                    "Ensure the Docker image was built with ColabFold support "
+                    "(see colabfold_environment.yml and scripts/colabfold_batch)."
+                )
 
         disulfide_pairs = _parse_disulfide_pairs(
             config.get("disulfide_bond_pairs")

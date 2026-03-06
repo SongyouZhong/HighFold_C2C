@@ -40,7 +40,7 @@ services:
       MAX_CONCURRENT_TASKS: ${MAX_CONCURRENT_TASKS:-2}
       # HighFold defaults
       C2C_CHECKPOINT_PATH: /app/checkpoints/c2c_model.pt
-      COLABFOLD_BIN: ${COLABFOLD_BIN:-colabfold_batch}
+      COLABFOLD_BIN: ${COLABFOLD_BIN:-/usr/local/bin/colabfold_batch}
       # Paths
       TEMP_DIR: /tmp/highfold_c2c
       LOG_DIR: /tmp/highfold_c2c/logs
@@ -49,6 +49,7 @@ services:
     volumes:
       - logs:/tmp/highfold_c2c/logs
       - temp:/tmp/highfold_c2c
+      - colabfold_cache:/root/.cache/colabfold
     deploy:
       resources:
         reservations:
@@ -60,3 +61,4 @@ services:
 volumes:
   logs:
   temp:
+  colabfold_cache:

@@ -66,7 +66,10 @@ def setup_logging(log_file: Path, mode: str = "w", verbose: bool = False) -> Non
     warnings.simplefilter(action="ignore", category=TqdmExperimentalWarning)
 
 def get_commit() -> Optional[str]:
-    text = distribution("colabfold").read_text("direct_url.json")
+    try:
+        text = distribution("colabfold").read_text("direct_url.json")
+    except Exception:
+        return None
     if not text:
         return None
     direct_url = json.loads(text)

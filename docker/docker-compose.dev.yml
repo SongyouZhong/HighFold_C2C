@@ -19,8 +19,11 @@ services:
       - ../c2c:/app/c2c:ro
       - ../scripts:/app/scripts:ro
       - ../utils:/app/utils:ro
+      - ../colabfold:/app/colabfold:ro
+      - ../alphafold:/app/alphafold:ro
       - logs:/tmp/highfold_c2c/logs
       - temp:/tmp/highfold_c2c
+      - colabfold_cache:/root/.cache/colabfold
     environment:
       DEBUG: "true"
       TASK_QUERY_INTERVAL: 60
@@ -29,3 +32,4 @@ services:
 volumes:
   logs:
   temp:
+  colabfold_cache:
