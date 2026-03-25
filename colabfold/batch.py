@@ -385,9 +385,8 @@ def predict_structure(
             else:
                 if model_num == 0:
                     input_features = model_runner.process_features(feature_dict, random_seed=seed)
-                    # CycPOEM: inject offset_ss for monomer
-                    if disulfide_bond_pairs:
-                        get_offset_monomer(disulfide_bond_pairs, input_features)
+                    # CycPOEM: always inject offset_ss for monomer (head-to-tail cyclization)
+                    get_offset_monomer(disulfide_bond_pairs or [], input_features)
                     r = input_features["aatype"].shape[0]
                     input_features["asym_id"] = np.tile(feature_dict["asym_id"],r).reshape(r,-1)
                     if seq_len < pad_len:
@@ -805,9 +804,8 @@ def process_multimer_features(
 
     # Pad MSA to avoid zero-sized extra_msa.
     np_example = pipeline_multimer.pad_msa(np_example, min_num_seq=min_num_seq)
-    # CycPOEM: inject offset_ss for multimer
-    if disulfide_bond_pairs:
-        get_offset(disulfide_bond_pairs, np_example)
+    # CycPOEM: always inject offset_ss for multimer (head-to-tail cyclization)
+    get_offset(disulfide_bond_pairs or [], np_example)
     return np_example
 
 def generate_input_feature(
