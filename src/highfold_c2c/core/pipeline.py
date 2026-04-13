@@ -33,6 +33,84 @@ def _parse_disulfide_pairs(raw: Optional[str]) -> List[Tuple[int, int]]:
     return pairs
 
 
+def _add_cyclic_conect(pdb_path: Path) -> None:
+    """Add CONECT records for the head-to-tail cyclic bond to a PDB file.
+
+    AlphaFold's ``to_pdb()`` never writes CONECT records, so the cyclic
+    N-C terminal bond is invisible to molecular viewers.  This function
+    finds the backbone N atom of the first residue and the backbone C atom
+    of the last residue in each chain and appends CONECT records.
+    """
+    text = pdb_path.read_text()
+    lines = text.split("\n")
+
+    # Collect per-chain first-N and last-C atom serial numbers
+    # {chain_id: {"first_n": (res_num, serial), "last_c": (res_num, serial)}}
+    chains: Dict[str, Dict[str, Tuple[int, int]]] = {}
+    for line in lines:
+        if not line.startswith("ATOM"):
+            continue
+        atom_name = line[12:16].strip()
+        chain_id = line[21]
+        res_num = int(line[22:26].strip())
+        serial = int(line[6:11].strip())
+
+        if chain_id not in chains:
+            chains[chain_id] = {}
+        entry = chains[chain_id]
+
+        if atom_name == "N":
+            if "first_n" not in entry or res_num < entry["first_n"][0]:
+                entry["first_n"] = (res_num, serial)
+        if atom_name == "C":
+            if "last_c" not in entry or res_num > entry["last_c"][0]:
+                entry["last_c"] = (res_num, serial)
+
+    conect_lines: List[str] = []
+    for chain_id, entry in chains.items():
+        if "first_n" in entry and "last_c" in entry:
+            n_serial = entry["first_n"][1]
+            c_serial = entry["last_c"][1]
+            conect_lines.append(f"CONECT{c_serial:>5}{n_serial:>5}")
+            conect_lines.append(f"CONECT{n_serial:>5}{c_serial:>5}")
+
+    if not conect_lines:
+        return
+
+    # Insert CONECT records before the END line
+    out_lines: List[str] = []
+    inserted = False
+    for line in lines:
+        stripped = line.strip()
+        if stripped == "END" and not inserted:
+            for cl in conect_lines:
+                out_lines.append(cl.ljust(80))
+            inserted = True
+        out_lines.append(line)
+
+    if not inserted:
+        # No END line found — just append
+        for cl in conect_lines:
+            out_lines.append(cl.ljust(80))
+
+    pdb_path.write_text("\n".join(out_lines))
+
+
+def _cyclize_pdb_files(output_dir: Path) -> int:
+    """Add cyclic CONECT records to all PDB files in *output_dir*.
+
+    Returns the number of PDB files processed.
+    """
+    count = 0
+    for pdb_file in sorted(output_dir.glob("*.pdb")):
+        try:
+            _add_cyclic_conect(pdb_file)
+            count += 1
+        except Exception as exc:
+            logger.warning("Failed to add cyclic CONECT to %s: %s", pdb_file.name, exc)
+    return count
+
+
 def _build_colabfold_cmd(
     colabfold_bin: str,
     fasta_path: Path,
@@ -214,6 +292,13 @@ def run_highfold_pipeline(config: Dict[str, Any], work_dir: Path) -> Dict[str, A
         logger.info("Stage 2/3: HighFold prediction — %s", " ".join(cmd))
         subprocess.run(cmd, check=True)
         logger.info("Stage 2 complete — results in %s", output_dir)
+
+        # Post-process: add cyclic bond CONECT records to PDB files
+        n_cyclized = _cyclize_pdb_files(output_dir)
+        logger.info(
+            "Stage 2 post-processing: added cyclic CONECT records to %d PDB files",
+            n_cyclized,
+        )
     else:
         logger.info("Stage 2 skipped")
 
